@@ -44,22 +44,61 @@ CsvPlugin::CsvPlugin()
 bool CsvPlugin::write(const Map *map, const QString &fileName)
 {
 #ifdef HAS_QSAVEFILE_SUPPORT
-    QSaveFile file(fileName);
+    QSaveFile *file;
 #else
-    QFile file(fileName);
+    QFile *file;
 #endif
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        mError = tr("Could not open file for writing.");
-        return false;
-    }
-
     const TileLayer *tileLayer = 0;
 
-    // Take the first tile layer
     foreach (const Layer *layer, map->layers()) {
+
+#ifdef HAS_QSAVEFILE_SUPPORT
+        QString tempFileName(fileName.mid(0, fileName.length() - 4));
+        tempFileName.append("_" + layer->name() + ".csv");
+
+        file = new QSaveFile(tempFileName);
+#else
+        file = new QFile(tempFileName);
+#endif
+
+        if (!file->open(QIODevice::WriteOnly | QIODevice::Text)) {
+            mError = tr("Could not open file for writing.");
+            return false;
+        }
+
         if (layer->layerType() == Layer::TileLayerType) {
             tileLayer = static_cast<const TileLayer*>(layer);
-            break;
+
+            // Write out tiles either by ID or their name, if given. -1 is "empty"
+            for (int y = 0; y < tileLayer->height(); ++y) {
+                for (int x = 0; x < tileLayer->width(); ++x) {
+                    if (x > 0)
+                        file->write(",", 1);
+
+                    const Cell &cell = tileLayer->cellAt(x, y);
+                    const Tile *tile = cell.tile;
+                    if (tile && tile->hasProperty(QLatin1String("name"))) {
+                        file->write(tile->property(QLatin1String("name")).toUtf8());
+                    } else {
+                        const int id = tile ? tile->id() : -1;
+                        file->write(QByteArray::number(id));
+                    }
+                }
+
+                file->write("\n", 1);
+            }
+
+            if (file->error() != QFile::NoError) {
+                mError = file->errorString();
+                return false;
+            }
+
+#ifdef HAS_QSAVEFILE_SUPPORT
+            if (!file->commit()) {
+                mError = file->errorString();
+                return false;
+            }
+#endif
         }
     }
 
@@ -67,37 +106,6 @@ bool CsvPlugin::write(const Map *map, const QString &fileName)
         mError = tr("No tile layer found.");
         return false;
     }
-
-    // Write out tiles either by ID or their name, if given. -1 is "empty"
-    for (int y = 0; y < tileLayer->height(); ++y) {
-        for (int x = 0; x < tileLayer->width(); ++x) {
-            if (x > 0)
-                file.write(",", 1);
-
-            const Cell &cell = tileLayer->cellAt(x, y);
-            const Tile *tile = cell.tile;
-            if (tile && tile->hasProperty(QLatin1String("name"))) {
-                file.write(tile->property(QLatin1String("name")).toUtf8());
-            } else {
-                const int id = tile ? tile->id() : -1;
-                file.write(QByteArray::number(id));
-            }
-        }
-
-        file.write("\n", 1);
-    }
-
-    if (file.error() != QFile::NoError) {
-        mError = file.errorString();
-        return false;
-    }
-
-#ifdef HAS_QSAVEFILE_SUPPORT
-    if (!file.commit()) {
-        mError = file.errorString();
-        return false;
-    }
-#endif
 
     return true;
 }
