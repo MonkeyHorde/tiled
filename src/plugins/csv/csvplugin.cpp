@@ -52,10 +52,10 @@ bool CsvPlugin::write(const Map *map, const QString &fileName)
 
     foreach (const Layer *layer, map->layers()) {
 
-#ifdef HAS_QSAVEFILE_SUPPORT
         QString tempFileName(fileName.mid(0, fileName.length() - 4));
         tempFileName.append("_" + layer->name() + ".csv");
-
+        
+#ifdef HAS_QSAVEFILE_SUPPORT
         file = new QSaveFile(tempFileName);
 #else
         file = new QFile(tempFileName);
